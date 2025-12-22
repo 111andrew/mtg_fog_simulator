@@ -1,4 +1,6 @@
 import random
+from land_class import *
+
 
 class mtg_play():
     def __init__(self, deck_dict):
@@ -39,15 +41,21 @@ class mtg_play():
 
     def play_land(self, land):
         # if fetch land in hand then play it first
-        self.hand.remove(land)
+        self.pop_item_by_card_name(self.hand, land)
         self.battlefield_append(land)
 
     def play_nonland(self, card):
-        self.hand.remove(card)
+        self.pop_item_by_card_name(self.hand, card)
         self.graveyard.append(card)
 
     def get_deck(self):
         return self.deck
     
     # gotta write a function instead of using remove
-    def pop_item_by_value(self):
+    def pop_item_by_card_name(self, list, card_name):
+        for idx, card in enumerate(list):
+            if card.get_name() == card_name:
+                first_index = idx
+                break
+        return list.pop(first_index)
+
