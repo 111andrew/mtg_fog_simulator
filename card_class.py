@@ -10,19 +10,16 @@ class Card:
         self.r = r
         self.g =g
         self.colorless = colorless
+    
+    def get_name(self):
+        return self.name
 
-class Island(Card):
-    def __init__(self):
-        super().__init__('basic_land', 'permanent', 0, 0, 0, 0, 0, 0, 0)
-        self.status = 'untapped'
+    def get_type(self):
+        return self.type
 
-    def tap_for_mana(self, mtg_play):
-        self.status = 'tapped'
-        mtg_play.modify_manapool(0, 1, 0, 0, 0, 0)
+    def get_cmc(self):
+        return self.cmc
+    
 
-    def play(self, mtg_play):
-        mtg_play.play_land(self)
 
-    def get_status(self):
-        return self.status
 

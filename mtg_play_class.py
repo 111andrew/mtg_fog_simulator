@@ -15,14 +15,19 @@ class mtg_play():
         self.graveyard = []
         for card in deck_dict.keys():
             self.deck.extend(deck_dict[card] * [card])
+
+        get_class = lambda x: globals()[x]
+        for card in deck_dict.keys():
+            for i in range(deck_dict[card]):
+                self.deck.append(get_class(card)())
         
     def draw(self, num_cards):
         for i in range(num_cards):
             card = self.deck.pop(0)
             self.hand.append(card)
 
-    def shuffle(self, deck):
-        random.shuffle(deck)
+    def shuffle(self):
+        random.shuffle(self.deck)
 
     def modify_manapool(self, w, u, b, r, g, colorless):
         self.manapool['w'] += w
@@ -32,29 +37,17 @@ class mtg_play():
         self.manapool['g'] += g
         self.manapool['colorless'] += colorless
 
-
     def play_land(self, land):
         # if fetch land in hand then play it first
         self.hand.remove(land)
         self.battlefield_append(land)
-        # if 'fetch_land' in self.hand:
-        #     self.hand.remove('fetch_land')
-        #     self.battlefield.append('fetch_land')
-        
-        # if 'basic_land' in self.hand:
-        #     self.hand.remove('basic_land')
-        #     self.battlefield.append('basic_land')
 
-    def crack_fetch_land(self):
-        self.battlefield.remove('fetch_land')
-        self.graveyard.append('fetch_land')
-        self.deck.remove('basic_land')
-        self.battlefield.append('basic_land')
-        random.shuffle(self.deck)
-
-    def play_nonland(self):
+    def play_nonland(self, card):
         self.hand.remove(card)
         self.graveyard.append(card)
 
     def get_deck(self):
         return self.deck
+    
+    # gotta write a function instead of using remove
+    def pop_item_by_value(self):
