@@ -11,7 +11,7 @@ class Island(Card):
         mtg_play.modify_manapool(0, 1, 0, 0, 0, 0)
 
     def play(self, mtg_play):
-        mtg_play.play_land(self)
+        mtg_play.play_land(self.get_name())
 
     def get_status(self):
         return self.status
@@ -26,7 +26,7 @@ class Plains(Card):
         mtg_play.modify_manapool(1, 0, 0, 0, 0, 0)
 
     def play(self, mtg_play):
-        mtg_play.play_land(self)
+        mtg_play.play_land(self.get_name())
 
     def get_status(self):
         return self.status
@@ -41,14 +41,15 @@ class Fetchland(Card):
         mtg_play.modify_manapool(0, 0, 0, 0, 0, 1)
 
     def play(self, mtg_play):
-        mtg_play.play_land(self)
+        mtg_play.play_land(self.get_name())
 
     def get_status(self):
         return self.status
     
     def crack_fetch_land(self, mtg_play, basic_land):
-        mtg_play.battlefield.remove('Fetchland')
-        mtg_play.graveyard.append('Fetchland')
-        mtg_play.deck.remove(basic_land)
-        mtg_play.battlefield.append(basic_land)
+        fetchland_obj = mtg_play.pop_item_by_card_name(mtg_play.battlefield, 'Fetchland')
+        mtg_play.graveyard.append(fetchland_obj)
+
+        basicland_obj = mtg_play.pop_item_by_card_name(mtg_play.deck, basic_land)
+        mtg_play.battlefield.append(basicland_obj)
         random.shuffle(mtg_play.deck)

@@ -6,6 +6,8 @@ class mtg_play():
     def __init__(self, deck_dict):
         self.deck = []
         self.hand = []
+        self.exile = []
+        self.life = 20
         self.manapool = {
             'w':0,
             'u':0,
@@ -15,13 +17,16 @@ class mtg_play():
             'colorless':0
         }
         self.graveyard = []
-        for card in deck_dict.keys():
-            self.deck.extend(deck_dict[card] * [card])
+        # for card in deck_dict.keys():
+        #     self.deck.extend(deck_dict[card] * [card])
 
         get_class = lambda x: globals()[x]
         for card in deck_dict.keys():
             for i in range(deck_dict[card]):
                 self.deck.append(get_class(card)())
+
+    def modify_life(self, lifegain):
+        self.life += lifegain
         
     def draw(self, num_cards):
         for i in range(num_cards):
@@ -32,6 +37,7 @@ class mtg_play():
         random.shuffle(self.deck)
 
     def modify_manapool(self, w, u, b, r, g, colorless):
+    
         self.manapool['w'] += w
         self.manapool['u'] += u
         self.manapool['b'] += b
@@ -39,14 +45,25 @@ class mtg_play():
         self.manapool['g'] += g
         self.manapool['colorless'] += colorless
 
+        total_mana = 0
+        for color in self.manapool:
+            total_mana += self.manapool[color]
+
+        # make sure total mana >= 0
+        assert total_mana >= 0
+
     def play_land(self, land):
         # if fetch land in hand then play it first
-        self.pop_item_by_card_name(self.hand, land)
-        self.battlefield_append(land)
+        land_obj = self.pop_item_by_card_name(self.hand, land)
+        self.battlefield.append(land_obj)
 
-    def play_nonland(self, card):
-        self.pop_item_by_card_name(self.hand, card)
-        self.graveyard.append(card)
+    def play_spell(self, card):
+        spell_obj = self.pop_item_by_card_name(self.hand, card)
+        self.graveyard.append(spell_obj)
+
+    def play_permanent(self, card):
+        permanent_obj = self.pop_item_by_card_name(self.hand, card)
+        self.battlefield.append(permanent_obj)
 
     def get_deck(self):
         return self.deck
