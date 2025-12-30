@@ -1,10 +1,14 @@
 import random
-from land_class import *
-from artifact_class import *
-from spell_class import *
-from enchantment_class import *
-from creature_class import *
+from card_classes.land_class import *
+from card_classes.artifact_class import *
+from card_classes.spell_class import *
+from card_classes.enchantment_class import *
+from card_classes.creature_class import *
+import sys
+import logging
 
+logger = logging.getLogger("mtg_play_class")
+logging.basicConfig(format='%(message)s', stream=sys.stdout, level=logging.CRITICAL)
 
 class mtg_play():
     def __init__(self, deck_dict):
@@ -29,9 +33,13 @@ class mtg_play():
 
         # start out with opponent starting hand considered
         self.opponent_milled = 7
-        self.opponent_milled_to_win = 40
+        self.opponent_milled_to_win = 60
         self.lost = False
         self.win = False
+
+        # results counter
+        self.fog_missed = 0
+        self.fog_turns = 0
 
         self.status = []
 
@@ -42,6 +50,7 @@ class mtg_play():
 
     def modify_life(self, lifegain):
         self.life += lifegain
+        logger.info("life total change: " + str(lifegain))
         if self.life < 1:
             self.lost = True
         
@@ -60,15 +69,15 @@ class mtg_play():
         # if fetch land in hand then play it first
         card_obj = self.pop_item_by_card_name(self.hand, card_name)
         self.graveyard.append(card_obj)
-        print("discard card: " + card_obj.get_name())
+        logger.info("discard card: " + card_obj.get_name())
 
     def put_card_to_deck_top(self, card_name):
-        print("Put card on deck top: " + card_name)
+        logger.info("Put card on deck top: " + card_name)
         card_obj = self.pop_item_by_card_name(self.hand, card_name)
         self.deck.insert(0, card_obj)
 
     def put_card_to_deck_bottom(self, card_name):
-        print("Put card on deck bottom: " + card_name)
+        logger.info("Put card on deck bottom: " + card_name)
         card_obj = self.pop_item_by_card_name(self.hand, card_name)
         self.deck.append(card_obj)
         
@@ -82,20 +91,30 @@ class mtg_play():
 
     ########################### mulligan
     def determine_and_mulligan(self):
-        should_mulligan = False
+        should_mulligan = True
 
-        while not should_mulligan:
+        while should_mulligan:
         
-            # mulligan if 0 lands or > 5 lands
+            # mulligan if 0 lands or > 4 lands
             hand_dict = self.get_card_type_counts(self.hand)
+
+            # pseudo_land_count = 0
+            # # count also land cyclers
+            # for card in self.hand:
+            #     if card.get_type() == 'land' or card.has_purpose('land cycle'):
+            #         pseudo_land_count += 1
+
             if 'land' in hand_dict.keys():
-                if hand_dict['land'] > 5:
+                if hand_dict['land'] > 4 or hand_dict['land'] < 2:
                     should_mulligan = True
+                else:
+                    should_mulligan = False
+            # else means there's no lands
             else:
                 should_mulligan = True
 
             # only mulligan at most 2 times
-            if self.mulligan_count > 2:
+            if self.mulligan_count > 1:
                 should_mulligan = False
             
             if should_mulligan:
@@ -116,7 +135,8 @@ class mtg_play():
     def float_all_mana(self):
         for card in self.battlefield:
             if card.get_type() == 'land':
-                card.tap_for_mana(self)
+                if card.tapped == False:
+                    card.tap_for_mana(self)
 
     def unfloat_all_mana(self):
         for card in self.battlefield:
@@ -159,6 +179,7 @@ class mtg_play():
 
         # reset the fog status
         self.unset_fog()
+        self.unset_no_damage()
 
     #################### end step items
     def untap_all(self):
@@ -171,7 +192,7 @@ class mtg_play():
         # discard to 7 cards
         while len(self.hand) > 7:
             card_to_discard = self.determine_card_to_discard()
-            # print("discard to handsize: " + card_to_discard)
+            # logger.info("discard to handsize: " + card_to_discard)
             self.discard(card_to_discard)
 
         # opponent draws one at their turn
@@ -199,7 +220,8 @@ class mtg_play():
                 g = 0-spell_obj.g,
                 colorless = 0-spell_obj.colorless
         )
-        # spell_obj play?
+        logger.info('played spell: new manapool')
+        logger.info(self.manapool)
         self.graveyard.append(spell_obj)
 
     def play_permanent(self, card_name):
@@ -225,7 +247,7 @@ class mtg_play():
                 b = 0,
                 r = 0,
                 g = 0,
-                colorless=mana_cost
+                colorless=-mana_cost
         )
 
         assert self.get_total_mana() >= 0
@@ -246,22 +268,22 @@ class mtg_play():
             if card.has_purpose('fog') and 'fog' not in self.status:
                 # try to see if can cast it
                 if card.can_pay_cmc(self):
-                    print("cast fog: " + card.get_name())
+                    logger.info("cast fog: " + card.get_name())
                     card.play(self)
 
     def determine_and_play_wincons(self):
         for card in self.hand:
             if card.has_purpose('win con'):
                 if card.can_pay_cmc(self):
-                    print("cast wincon: " + card.get_name())
+                    logger.info("cast wincon: " + card.get_name())
                     card.play(self)
 
     def determine_and_play_lifegain(self):
-        if self.life < 5:
+        if self.life < 9:
             for card in self.hand:
                 if card.has_purpose('life gain'):
                     if card.can_pay_cmc(self):
-                        print("cast life gain: " + card.get_name())
+                        logger.info("cast life gain: " + card.get_name())
                         card.play(self)
 
     def determine_and_play_monarch(self):
@@ -269,7 +291,7 @@ class mtg_play():
             for card in self.hand:
                 if card.has_purpose('monarch'):
                     if card.can_pay_cmc(self):
-                        print("cast monarch: " + card.get_name())
+                        logger.info("cast monarch: " + card.get_name())
                         card.play(self)
 
     def determine_cast_more_draw_spells(self):
@@ -288,12 +310,12 @@ class mtg_play():
                         card.update_draw_amount(self)
                     # try to leave at least one card in deck when drawing
                     if card.can_pay_cmc(self) and card.draw_amount < len(self.deck):
-                        print("played draw: " + card.get_name())
-                        print("draw amount: " + str(card.draw_amount))
-                        # print("deck left: " + str(len(self.deck)))
+                        logger.info("played draw: " + card.get_name())
+                        logger.info("draw amount: " + str(card.draw_amount))
+                        # logger.info("deck left: " + str(len(self.deck)))
                         card.play(self)
-                        print("new hand: ")
-                        print(self.pretty_list(self.hand))
+                        logger.info("new hand: ")
+                        logger.info(self.pretty_list(self.hand))
                         return
 
         # if not fogged, cast the cheapest draw so can pay fog later
@@ -303,10 +325,10 @@ class mtg_play():
             for idx, card in enumerate(self.hand):
                 if card.has_purpose('draw'):
                     if card.can_pay_cmc(self) and card.draw_amount <= len(self.deck):
-                        print("played draw: " + card.get_name())
+                        logger.info("played draw: " + card.get_name())
                         card.play(self)
-                        print("new hand: ")
-                        print(self.pretty_list(self.hand))
+                        logger.info("new hand: ")
+                        logger.info(self.pretty_list(self.hand))
                         return
 
     def can_cast_draw(self):
@@ -334,10 +356,10 @@ class mtg_play():
                     should_cycle = False
             
             if should_cycle:
-                index = self.find_card_index(self.hand, 'LorienRevealed')
-                if self.hand[index].can_cycle(self):
-                    print("land cycle " + self.hand[index].get_name())
-                    self.hand[index].land_cycle(self)
+                idx = self.find_card_index(self.hand, 'LorienRevealed')
+                if self.hand[idx].can_cycle(self):
+                    logger.info("land cycle " + self.hand[idx].get_name())
+                    self.hand[idx].land_cycle(self)
 
 
     def determine_and_crack_fetch_land(self):
@@ -380,8 +402,8 @@ class mtg_play():
                     land_to_fetch = 'Island'
             
             if land_to_fetch:
-                print('crack fetch for: ' + land_to_fetch)
-                # print(lands_in_deck)
+                logger.info('crack fetch for: ' + land_to_fetch)
+                # logger.info(lands_in_deck)
                 for idx, card in enumerate(self.battlefield):
                     if card.get_name() == 'Fetchland':
                         first_index = idx
@@ -402,8 +424,8 @@ class mtg_play():
         battlefield_card_type_dict = self.get_card_type_counts(self.battlefield)
         hand_type_dict = self.get_card_type_counts(self.hand)
         hand_dict = self.get_card_counts(self.hand)
-        # print("discard")
-        # print(self.pretty_list(self.hand))
+        # logger.info("discard")
+        # logger.info(self.pretty_list(self.hand))
 
         # check if there are two or more lands in hand
         if 'land' in hand_type_dict.keys():
@@ -440,14 +462,19 @@ class mtg_play():
             if not card.has_purpose('win con'):
                 card_to_discard = card.get_name()
                 return card_to_discard
-        
+            
+        # if hand is all win con... then discard it
+        if not card_to_discard:
+            card_to_discard = self.hand[0].get_name()
+            return card_to_discard
+
         assert card_to_discard != None
 
     def determine_play_any_land(self):
         for card in self.hand:
             if card.get_type() == 'land':
                 self.play_land(card.get_name())
-                print('played land: ' + card.get_name())
+                logger.info('played land: ' + card.get_name())
                 return
 
     def determine_and_play_land(self):
@@ -455,19 +482,31 @@ class mtg_play():
         hand_dict = self.get_card_counts(self.hand)
 
         # check what mana is available first
-        self.float_all_mana()
+        temp_mana_pool = {
+            'w':0,
+            'u':0,
+            'b':0,
+            'r':0,
+            'g':0,
+            'colorless':0
+        }
+
+        for card in self.battlefield:
+            if card.get_type() == 'land':
+                for color in card.generate_mana.keys():
+                    temp_mana_pool[color] += card.generate_mana[color]
 
         land_to_play = None
 
         # if there's no white mana, play a white first
-        if self.manapool['w'] == 0:
+        if temp_mana_pool['w'] == 0:
             if 'Plains' in hand_dict.keys():
                 land_to_play = 'Plains'
             elif 'Fetchland' in hand_dict.keys():
                 land_to_play = 'Fetchland'
             elif 'Island' in hand_dict.keys():
                 land_to_play = 'Island'
-        elif self.manapool['u'] < 2:
+        elif temp_mana_pool['u'] < 2:
             if 'Island' in hand_dict.keys():
                 land_to_play = 'Island'
             elif 'Fetchland' in hand_dict.keys():
@@ -482,13 +521,10 @@ class mtg_play():
             elif 'Plains' in hand_dict.keys():
                 land_to_play = 'Plains'
 
-        # revert it back
-        self.unfloat_all_mana()
-
         if land_to_play:
             self.play_land(land_to_play)
             self.land_played_this_turn = True
-            print('played land: ' + land_to_play)
+            logger.info('played land: ' + land_to_play)
 
         return land_to_play
     
@@ -496,7 +532,7 @@ class mtg_play():
     def draw_if_monarch(self):
         if 'monarch' in self.status:
             self.draw(1)
-            print("draw for monarch")
+            logger.info("draw for monarch")
 
     ################ campfire determinations
     def determine_tap_campfire_for_life(self):
@@ -507,7 +543,7 @@ class mtg_play():
                 idx = self.get_first_untapped_on_battlefield('Campfire')
                 if idx and self.get_total_mana() > 0:
                     self.battlefield[idx].tap_to_gain_life(self)
-                    print("campfire gained life")
+                    logger.info("campfire gained life")
 
     def determine_crack_campfire(self):
         # if there's no cards in deck, crack campfire if able
@@ -516,7 +552,7 @@ class mtg_play():
             if 'Campfire' in battlefield_dict.keys():
                 idx = self.get_first_untapped_on_battlefield('Campfire')
                 self.battlefield[idx].shuffle_grave_to_library(self)
-                print("cracked campfire")
+                logger.info("cracked campfire")
 
     #################### getting items
 
@@ -597,16 +633,29 @@ class mtg_play():
         if 'fog' in self.status:
             self.status.remove('fog')
 
+    def set_no_damage(self):
+        if 'no damage' not in self.status:
+            self.status.append('no damage')
+
+    def unset_no_damage(self):
+        if 'no damage' in self.status:
+            self.status.remove('no damage')
+
     ############################# dmg profile
     # simple damage profile of 2 damage plus 2 a turn on no fogs
     def assign_dmg_from_opponent(self, turn):
-        if 'fog' in self.status:
+        if 'no damage' in self.status:
+            damage = 0
+            self.fog_turns += 1
+        elif 'fog' in self.status:
             damage = 2
+            self.fog_turns += 1
         else:
             damage = 2 + turn * 2 -4
+            self.fog_missed += 1
             if 'monarch' in self.status:
                 self.status.remove('monarch')
-                print('lost monarch!')
+                logger.info('lost monarch!')
 
         self.modify_life(-damage)
 
