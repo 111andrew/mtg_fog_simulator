@@ -62,8 +62,8 @@ class mtg_play():
             else:
                 card = self.deck.pop(0)
                 self.hand.append(card)
-        jaces_erasure_count = self.status.count("JacesErasure")
-        self.modify_opponent_milled(jaces_erasure_count)
+            jaces_erasure_count = self.status.count("JacesErasure")
+            self.modify_opponent_milled(jaces_erasure_count)
     
     def discard(self, card_name):
         # if fetch land in hand then play it first
@@ -86,6 +86,8 @@ class mtg_play():
 
     def modify_opponent_milled(self, milled):
         self.opponent_milled += milled
+        logger.info(self.get_card_counts(self.battlefield))
+        logger.info("opponent milled: " + str(milled) + " total milled: " + str(self.opponent_milled) )
         if self.opponent_milled > self.opponent_milled_to_win:
             self.win = True
 
@@ -119,6 +121,9 @@ class mtg_play():
             
             if should_mulligan:
                 self.mulligan_count += 1
+
+                logger.info("mulliganing!")
+                logger.info(self.pretty_list(self.hand))
                 
                 # refresh deck and hand
                 self.deck = self.deck + self.hand
@@ -129,6 +134,9 @@ class mtg_play():
                 for i in range(self.mulligan_count):
                     card_to_discard = self.determine_card_to_discard()
                     self.put_card_to_deck_bottom(card_to_discard)
+
+                logger.info("new hand: ")
+                logger.info(self.pretty_list(self.hand))
         
     ########################### mana related
 
@@ -297,7 +305,15 @@ class mtg_play():
     def determine_cast_more_draw_spells(self):
         # simple rules for now, can be more complicated in future
         while len(self.hand) < 8 and self.can_cast_draw():
-            self.determine_and_play_one_draw()   
+            self.determine_and_play_one_draw()
+
+    def determine_and_play_loot(self):
+        for card in self.hand:
+            if card.has_purpose('loot'):
+                should_loot = card.loot_opportunity(self)
+                if should_loot:
+                    if card.can_pay_cmc(self):
+                        card.play(self)
 
     def determine_and_play_one_draw(self):
         # if fogged already --> cast most expensive draw
@@ -306,7 +322,7 @@ class mtg_play():
             self.sort_list_by_cmc(self.hand)
             for idx, card in enumerate(self.hand):
                 if card.has_purpose('draw'):
-                    if card.get_name() == 'AccumulatedKnowledge':
+                    if card.has_purpose('draws more'):
                         card.update_draw_amount(self)
                     # try to leave at least one card in deck when drawing
                     if card.can_pay_cmc(self) and card.draw_amount < len(self.deck):
@@ -335,8 +351,8 @@ class mtg_play():
         can_cast_draw = False
         for card in self.hand:
             if card.has_purpose('draw'):
-                # update draw amounts for accumulated knowledge
-                if card.get_name() == 'AccumulatedKnowledge':
+                # update draw amounts for cards like accumulated knowledge
+                if card.has_purpose('draws more'):
                     card.update_draw_amount(self)
                 if card.can_pay_cmc(self) and (card.draw_amount < len(self.deck)):
                     can_cast_draw = True
@@ -651,8 +667,12 @@ class mtg_play():
             damage = 2
             self.fog_turns += 1
         else:
-            damage = 2 + turn * 2 -4
+            # damage = 2 + turn * 2 -4
             self.fog_missed += 1
+            if turn > 3:
+                damage = 100
+            else:
+                damage = 3
             if 'monarch' in self.status:
                 self.status.remove('monarch')
                 logger.info('lost monarch!')
