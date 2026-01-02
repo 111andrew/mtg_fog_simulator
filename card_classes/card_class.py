@@ -64,6 +64,3 @@ class Card:
         if total_cost > mtg_play.get_total_mana():
             can_pay = False
         return can_pay
-
-
-
