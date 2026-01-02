@@ -9,38 +9,41 @@ logger = logging.getLogger("turn_class")
 # level = logging.INFO for all infos
 logging.basicConfig(format='%(message)s', stream=sys.stdout, level=logging.CRITICAL)
 
-# TODO, do an audit to see why it keeps subtracting islands
 
 # make deck list
 deck_dict = {
     ######## lands
     # 8 fetchland original
-    'Fetchland':10,
+    'Fetchland':8,
     'Island':5,
     'Plains':5,
 
     ######### mill
-    'Campfire':1,
+    'Campfire':2,
     'JacesErasure':1,
 
     ######### monarch
-    'AzureFleetAdmiral':2,
+    'AzureFleetAdmiral':0,
 
     ######### fogs
     'HolyDay':4,
-    'DawnCharm':3,
+    'FalsePeace':2,
+    'DawnCharm':0,
     'EtherealHaze':4,
-    'MomentOfSilence':1,
+    'MomentOfSilence':4,
+    'AngelSong':0,
     'RiotControl':4,
 
     ######### draws
+    'AbandonAttachment':4,
     'ArcaneDenial':4,
     'AccumulatedKnowledge':4,
-    'Brainstorm':4,
-    'KeepWatch':1,
-    'UnionOfTheThirdPath':4,
-    'WordsOfWisdom':2,
-    'LorienRevealed':4
+    'Brainstorm':0,
+    'KeepWatch':2,
+    'UnionOfTheThirdPath':2,
+    'WordsOfWisdom':0,
+    'LorienRevealed':4,
+    'TakeInventory':4
 }
 
 
@@ -98,6 +101,7 @@ def play_with_deck(deck_dict):
             # play lowest costing draw spell, until fog in hand
             ## if no fog and no mana --> lose
             while ('fog' not in player.status) and (player.can_cast_draw()):
+                player.determine_and_play_loot()
                 player.determine_and_play_one_draw()
                 player.determine_and_play_fog()
 
@@ -110,13 +114,27 @@ def play_with_deck(deck_dict):
         # try to get monarch
         player.determine_and_play_monarch()
 
-        # cast more draws to get back to 7 cards if less than 7 cards
-        player.determine_cast_more_draw_spells()
-
         # see if drew into lands and hadn't played lands yet
         if not player.land_played_this_turn:
             player.determine_play_any_land()
             player.float_all_mana()
+
+        # maybe need to put monarch into more instanst speed territory
+        # draw if monarch
+        player.draw_if_monarch()
+
+        # try another determination if monarach makes a difference
+        if turn >= turn_to_start_fogging:
+            # check if there's a fog in hand
+            player.determine_and_play_fog()
+
+            while ('fog' not in player.status) and (player.can_cast_draw()):
+                player.determine_and_play_loot()
+                player.determine_and_play_one_draw()
+                player.determine_and_play_fog()
+
+        # cast more draws to get back to 7 cards if less than 7 cards
+        player.determine_cast_more_draw_spells()
 
         # determine whether to crack campfire here too, if last played
         player.determine_crack_campfire()
@@ -126,9 +144,6 @@ def play_with_deck(deck_dict):
 
         # crack fetch lands if leftover mana
         player.determine_and_crack_fetch_land()
-
-        # draw if monarch
-        player.draw_if_monarch()
 
         # end step
         player.end_step()
@@ -160,72 +175,93 @@ def play_with_deck(deck_dict):
 
 # optimize for win rate
 def run_optimizer(deck_dict):
-    original_deck = deck_dict.copy()
-
     types_of_lands = ['Island', 'Plains', 'Fetchland']
-    optimized = False
 
-    # for card in deck_dict.keys():
-    card = 'Island'
+    cards_to_optimize = [
+                        # 'Fetchland', 'FalsePeace', 
+                        #  'Fetchland', 'UnionOfTheThirdPath',
+                         'Fetchland', 'AbandonAttachment',
+                        #  'Fetchland', 'JacesErasure', 
+                        #   'Fetchland', 'WordsOfWisdom', 
+                        #   'Fetchland', 'KeepWatch',
+                        #   'Fetchland', 'AzureFleetAdmiral',
+                        #   'Fetchland', 'Brainstorm', 'Fetchland'
+                          ]
 
-    base_count = deck_dict[card]
-    base_win_rate, avg_milled, lost_missed_fog, lost_burned = run_simulation(deck_dict)
+    # optimize all
+    # cards_to_optimize = deck_dict.keys()
+    
 
-    last_action = 'start'
+    for card in cards_to_optimize:
+        optimized = False
 
-    while not optimized:
-        print('*************** optimizing: ' + card)
+        base_count = deck_dict[card]
+        base_win_rate, avg_milled, lost_missed_fog, lost_burned = run_simulation(deck_dict)
 
-        # try adding or subtracing to see if the win rate increases
-        # lands can have more than 4 copies
-        one_more_copy = deck_dict[card] + 1
-        one_less_copy = deck_dict[card] - 1
+        last_action = 'start'
 
-        if card not in types_of_lands:
-            if one_more_copy > 4:
-                one_more_copy = False
-            if one_less_copy < 0:
-                one_less_copy = False
+        while not optimized:
+            print('*************** optimizing: ' + card)
+            total_cards_in_deck = 0
+            for card_count in deck_dict.keys():
+                total_cards_in_deck += deck_dict[card_count]
 
-        one_more_win_rate = 0
-        one_less_win_rate = 0
+            print("total cards in deck: " + str(total_cards_in_deck))
 
-        if one_more_copy and (last_action == 'start' or last_action == 'add'):
-            deck_dict[card] = one_more_copy
-            # simulate the one more and less to see if improves
-            print(str(deck_dict[card]) + "  " + card)
-            one_more_win_rate, avg_milled, lost_missed_fog, lost_burned = run_simulation(deck_dict)
+            # try adding or subtracing to see if the win rate increases
+            # lands can have more than 4 copies
+            one_more_copy = deck_dict[card] + 1
+            no_more = False
+            one_less_copy = deck_dict[card] - 1
+            no_less = False
 
-        if one_less_copy and (last_action == 'start' or last_action == 'subtract'):
-            deck_dict[card] = one_less_copy
-            print(str(deck_dict[card]) + "  " + card)
-            one_less_win_rate, avg_milled, lost_missed_fog, lost_burned = run_simulation(deck_dict)
+            if card not in types_of_lands:
+                if one_more_copy > 4:
+                    no_more = True
+                    
+                if one_less_copy < 0:
+                    no_less = True
 
-        if base_win_rate > one_more_win_rate and base_win_rate > one_less_win_rate:
-            deck_dict[card] = base_count
-            optimized = True
-            print('***************optimized :: ' + card + " " + str(base_count))
+            one_more_win_rate = 0
+            one_less_win_rate = 0
 
-        else:
-            if one_more_win_rate > base_win_rate:
+            if (not no_more) and (last_action == 'start' or last_action == 'add'):
                 deck_dict[card] = one_more_copy
-                one_less_copy = base_count
-                one_less_win_rate = base_win_rate
+                # simulate the one more and less to see if improves
+                print(str(deck_dict[card]) + "  " + card)
+                one_more_win_rate, avg_milled, lost_missed_fog, lost_burned = run_simulation(deck_dict)
 
-                base_count = one_more_copy
-                base_win_rate = one_more_win_rate
-
-                last_action = 'add'
-                print('adding one more')
-
-            elif one_less_win_rate > base_win_rate:
+            if (not no_less) and (last_action == 'start' or last_action == 'subtract'):
                 deck_dict[card] = one_less_copy
-                one_more_copy = base_count
-                one_more_win_rate = base_win_rate
-                base_count = one_less_copy
-                base_win_rate = one_less_win_rate
-                last_action = 'subtract'
-                print('subtracting one')
+                print(str(deck_dict[card]) + "  " + card)
+                one_less_win_rate, avg_milled, lost_missed_fog, lost_burned = run_simulation(deck_dict)
+
+            if base_win_rate > one_more_win_rate and base_win_rate > one_less_win_rate:
+                deck_dict[card] = base_count
+                optimized = True
+                print('***************optimized :: ' + card + " " + str(base_count))
+
+            else:
+                if one_more_win_rate > base_win_rate:
+                    deck_dict[card] = one_more_copy
+                    one_less_copy = base_count
+                    one_less_win_rate = base_win_rate
+
+                    base_count = one_more_copy
+                    base_win_rate = one_more_win_rate
+
+                    last_action = 'add'
+                    print('adding one more')
+
+                elif one_less_win_rate > base_win_rate:
+                    deck_dict[card] = one_less_copy
+                    one_more_copy = base_count
+                    one_more_win_rate = base_win_rate
+                    
+                    base_count = one_less_copy
+                    base_win_rate = one_less_win_rate
+                    last_action = 'subtract'
+                    print('subtracting one')
 
     # print new decklist
     for card in deck_dict.keys():
@@ -237,6 +273,7 @@ def run_simulation(deck_dict):
     sample_size = 50000
     result_list = []
     for i in range(sample_size):
+        logger.info('***************** GAME ' + str(i) + ' ******')
         result_dict = play_with_deck(deck_dict)
         result_list.append(result_dict)
     df = pd.DataFrame(result_list)
@@ -249,8 +286,10 @@ def run_simulation(deck_dict):
     lost_burned = len(df.loc[(df.win == False) & (df.lost_due_to_missed_fog == False) ]) / len(df)
     mulligans_per_game = sum(df['mulligan_count']) / len(df)
     print('win rate: ' + str(win_rate))
+
+    # TODO not sure why win rate is 0 with 0 jaces erasure
     print('muligan rate: ' + str(mulligans_per_game))
-    logger.info('avg milled: ' + str(avg_milled))
+    print('avg milled: ' + str(avg_milled))
     print('lost missed fog: ' + str(lost_missed_fog))
 
     logger.info('lost burned: ' + str(lost_burned))
